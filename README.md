@@ -1,15 +1,22 @@
-# Local-Drop
-Sharing files between cross platform devices, without internet 
-
-
-Invoke-WebRequest -Uri "https://github.com/anacondy/LocalDrop/archive/refs/heads/main.zip" -OutFile "LocalDrop.zip"; Expand-Archive -Path "LocalDrop.zip" -DestinationPath "."; cd LocalDrop-main; .\run.bat
-
-
 # Local Drop 🚀
 
 A high-performance, lightweight, open-source Progressive Web App (PWA) designed to transfer files directly across local networks (LAN) at maximum hardware speeds without using cell data or internet bandwidth.
 
+### 🚀 Quick Start
+If you have Git and Python installed, simply run this command in your terminal:
+
+**Windows (PowerShell):**
+```powershell
+git clone https://github.com/anacondy/Local-Drop.git && cd Local-Drop && .\run.bat
+```
+
+**macOS / Linux:**
+```bash
+git clone https://github.com/anacondy/Local-Drop.git && cd Local-Drop && chmod +x run.sh && ./run.sh
+```
+
 ---
+
 
 ## 💻 System & Device Compatibility
 
