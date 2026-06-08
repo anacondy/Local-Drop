@@ -1,33 +1,43 @@
 #!/bin/bash
 
-# Dynamically set the working directory to the folder this script is in
+# Dynamically set working directory
 cd "$(dirname "$0")"
-
 clear
+
 echo "======================================================="
-echo "   Checking System Configurations and Dependencies..."
+echo "   Initializing Local Drop Environment..."
 echo "======================================================="
 
-# Check if Python3 is installed
+# 1. Check Python installation
 if ! command -v python3 &> /dev/null; then
     echo "[Error] Python 3 is not installed. Please install it to continue."
     exit 1
 fi
 
-# Silent dependency check
-python3 -c "import flask, qrcode" 2>/dev/null
-if [ $? -eq 0 ]; then
-    echo "[System Status] Dependencies verified. Skipping module installation."
-else
-    echo "[System Status] Requirements missing. Installing only what is needed..."
-    pip3 install -r requirements.txt
+# 2. Virtual Environment Generator
+if [ ! -d "venv" ]; then
+    echo "[Setup] Creating isolated Virtual Environment..."
+    python3 -m venv venv
     if [ $? -ne 0 ]; then
-        echo "[Error] Failed to install required modules."
+        echo "[Error] Failed to create venv. On some Linux distros, you may need to run: sudo apt install python3-venv"
         exit 1
     fi
 fi
 
-echo "[System Status] Launching Server..."
+# 3. Activate the Virtual Environment
+source venv/bin/activate
+
+# 4. Silent Dependency Check (Inside venv)
+python3 -c "import flask, qrcode" 2>/dev/null
+if [ $? -eq 0 ]; then
+    echo "[System] Dependencies verified."
+else
+    echo "[Setup] Installing required packages securely..."
+    pip install -r requirements.txt
+fi
+
+# 5. Launch Application
+echo "[System] Launching Server..."
 while true; do
     python3 local_drop.py
     echo ""
