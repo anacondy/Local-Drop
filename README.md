@@ -34,13 +34,11 @@ Before launching the utility, ensure your host computer has **Python 3.8 or high
 Ensure your local project folder is organized exactly like this:
 ```text
 LocalDrop/
-├── local_drop.py        # Core Flask server backend and PWA generator
-├── requirements.txt     # Python dependency configuration file
-├── run.bat              # Automation script for Windows environments
-├── run.sh               # Automation script for macOS and Linux environments
-└── README.md            # System documentation and guide
-
-
+├── .gitignore           # Keeps your repo clean
+├── local_drop.py        # The master Flask & PWA backend
+├── requirements.txt     # List of dependencies
+├── run.bat              # Universal Windows launcher
+└── run.sh               # Universal macOS/Linux launcher
 
 ### 🛡️ Isolated Execution Environment
 To prevent system conflicts and adhere to modern PEP 668 standards (especially on Linux), the automated launch scripts will seamlessly generate a localized Python Virtual Environment (`venv`). 
