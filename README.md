@@ -39,3 +39,11 @@ LocalDrop/
 ├── run.bat              # Automation script for Windows environments
 ├── run.sh               # Automation script for macOS and Linux environments
 └── README.md            # System documentation and guide
+
+
+
+### 🛡️ Isolated Execution Environment
+To prevent system conflicts and adhere to modern PEP 668 standards (especially on Linux), the automated launch scripts will seamlessly generate a localized Python Virtual Environment (`venv`). 
+* No `sudo` permissions required.
+* No global system packages are touched.
+* Simply delete the `LocalDrop` folder to completely uninstall; nothing is left behind on your OS.
