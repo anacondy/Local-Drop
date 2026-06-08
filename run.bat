@@ -2,38 +2,45 @@
 title Local Drop Launcher
 cls
 
-:: This forces the terminal into the exact folder this file is located in
+:: Force terminal into the script's directory
 cd /d "%~dp0"
 
 echo =======================================================
-echo    Checking System Configurations and Dependencies...
+echo    Initializing Local Drop Environment...
 echo =======================================================
 
-:: Check if Python is installed at all
-python --version >NUL 2>NUL
+:: 1. Smart Python Targeter (Prefers 'py -3', falls back to 'python')
+set PYTHON_CMD=python
+py -3 --version >NUL 2>NUL
+if %errorlevel% equ 0 set PYTHON_CMD=py -3
+
+%PYTHON_CMD% --version >NUL 2>NUL
 if %errorlevel% neq 0 (
-    echo [Error] Python is not installed or not in PATH. Please install Python 3.
+    echo [Error] Python 3 is not installed or not in PATH.
     pause
     exit /b
 )
 
-:: Silent dependency check
+:: 2. Virtual Environment Generator
+if not exist "venv\Scripts\activate.bat" (
+    echo [Setup] Creating isolated Virtual Environment...
+    %PYTHON_CMD% -m venv venv
+)
+
+:: 3. Activate the Virtual Environment
+call venv\Scripts\activate.bat
+
+:: 4. Silent Dependency Check (Inside venv)
 python -c "import flask, qrcode" 2>NUL
-if %errorlevel% equ 0 (
-    echo [System Status] Dependencies verified. Skipping module installation.
-    goto LAUNCH_PROCESS
-)
-
-echo [System Status] Requirements missing. Installing only what is needed...
-pip install -r requirements.txt
 if %errorlevel% neq 0 (
-    echo [Error] Dependency installation failed. Please check your internet connection.
-    pause
-    exit /b
+    echo [Setup] Installing required packages securely...
+    pip install -r requirements.txt
+) else (
+    echo [System] Dependencies verified.
 )
 
-:LAUNCH_PROCESS
-echo [System Status] Launching Server...
+:: 5. Launch Application
+echo [System] Launching Server...
 :LOOP
 python local_drop.py
 echo.
