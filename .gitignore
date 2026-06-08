@@ -1,0 +1,30 @@
+# Python Virtual Environments
+venv/
+env/
+
+# Python Cache & Compiled Files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS Generated System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Developer Environment Files
+.env
+.vscode/
+.idea/
+
+# Ignore Media/Testing Files (Just in case you test files inside the folder)
+*.mp4
+*.mp3
+*.jpg
+*.jpeg
+*.png
+*.pdf
