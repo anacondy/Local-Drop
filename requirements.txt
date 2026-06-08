@@ -1,0 +1,3 @@
+# Operational minimal framework dependencies for Local Drop system routing
+Flask==3.0.2
+qrcode==7.4.2
