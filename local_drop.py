@@ -292,9 +292,9 @@ if __name__ == '__main__':
     print(f"\nUrl link route: {hosting_url}")
     print("If you toggle routing band connections, do not close this console.")
     
-    qr = qrcode.QRCode(version=1, box_size=1, border=4)
+        qr = qrcode.QRCode(version=1, box_size=1, border=2)
     qr.add_data(hosting_url)
     qr.make(fit=True)
-    qr.print_tty()
+    qr.print_ascii(invert=True)
     
     app.run(host='0.0.0.0', port=port_num, debug=False, threaded=True)
