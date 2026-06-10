@@ -13,7 +13,7 @@ log.setLevel(logging.ERROR)
 
 app = Flask(__name__)
 # Permit files up to 2 Gigabytes per transmission block
-app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024 
+app.config['MAX_CONTENT_LENGTH'] = 2 * 1024 * 1024 * 1024
 
 # Progressive Web App configuration manifest mapping
 MANIFEST_JSON = {
@@ -25,7 +25,6 @@ MANIFEST_JSON = {
     "theme_color": "#0a0a0a",
     "icons": [
         {
-            # A modern minimalist custom transfer emblem for your home screen app icon
             "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='2'><path stroke-linecap='round' stroke-linejoin='round' d='M12 3v13m0 0l-4-4m4 4l4-4M4 19h16'/></svg>",
             "sizes": "192x192",
             "type": "image/svg+xml"
@@ -104,7 +103,7 @@ HTML_TEMPLATE = """
 
         dropZone.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => handleFiles(fileInput.files));
-        
+
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(ev => {
             dropZone.addEventListener(ev, e => e.preventDefault(), false);
         });
@@ -113,18 +112,15 @@ HTML_TEMPLATE = """
         function handleFiles(files) {
             if (files.length === 0) return;
             const formData = new FormData();
-            
-            // Capture precise client machine timestamp right before bytes enter the stream
             formData.append('client_launch_timestamp', Date.now());
-            
-            for (let i = 0; i < files.length; i++) { 
-                formData.append('files', files[i]); 
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
             }
-            
+
             const xhr = new XMLHttpRequest();
             xhr.open('POST', '/upload', true);
             xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
-            
+
             progressContainer.classList.remove('hidden');
             progressBar.style.width = '0%';
             progressPercent.innerText = '0%';
@@ -156,8 +152,8 @@ HTML_TEMPLATE = """
 def get_target_directories():
     """Identifies host OS platform structure and paths files into correct user directories."""
     home = str(Path.home())
-    system = platform.system() 
-    
+    system = platform.system()
+
     def resolve_path(*subdirs):
         if system == 'Windows':
             od_path = os.path.join(home, 'OneDrive', *subdirs, 'LocalDrop')
@@ -165,7 +161,7 @@ def get_target_directories():
                 return od_path
         return os.path.join(home, *subdirs, 'LocalDrop')
 
-    if system == 'Darwin': # macOS directory maps
+    if system == 'Darwin':
         return {
             'Images': resolve_path('Pictures'),
             'Videos': resolve_path('Movies'),
@@ -173,7 +169,7 @@ def get_target_directories():
             'Docs':   resolve_path('Documents'),
             'Other':  resolve_path('Downloads')
         }
-    else: # Linux and Windows standard directory fallback mapping
+    else:
         return {
             'Images': resolve_path('Pictures'),
             'Videos': resolve_path('Videos'),
@@ -186,23 +182,26 @@ def route_file(filename):
     """Sorts all files into target directories based on extension matching."""
     ext = filename.lower().split('.')[-1] if '.' in filename else ''
     dirs = get_target_directories()
-    
-    if ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'heif', 'raw', 'svg', 'tiff', 'ico']: 
+
+    if ext in ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'heic', 'heif', 'raw', 'svg', 'tiff', 'ico']:
         return dirs['Images']
-    if ext in ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'ts']: 
+    if ext in ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'm4v', '3gp', 'ts']:
         return dirs['Videos']
-    if ext in ['mp3', 'wav', 'aac', 'flac', 'm4a', 'ogg', 'wma', 'alac', 'opus']: 
+    if ext in ['mp3', 'wav', 'aac', 'flac', 'm4a', 'ogg', 'wma', 'alac', 'opus']:
         return dirs['Music']
-    if ext in ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'json', 'xml', 'md']: 
+    if ext in ['pdf', 'doc', 'docx', 'txt', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'json', 'xml', 'md']:
         return dirs['Docs']
-    
+
     return dirs['Other']
 
 def format_size(size_in_bytes):
     """Parses binary byte streams into human-readable notations."""
-    if size_in_bytes >= 1024 * 1024 * 1024: return f"{size_in_bytes / (1024 ** 3):.2f} GB"
-    elif size_in_bytes >= 1024 * 1024: return f"{size_in_bytes / (1024 ** 2):.2f} MB"
-    else: return f"{size_in_bytes / 1024:.2f} KB"
+    if size_in_bytes >= 1024 * 1024 * 1024:
+        return f"{size_in_bytes / (1024 ** 3):.2f} GB"
+    elif size_in_bytes >= 1024 * 1024:
+        return f"{size_in_bytes / (1024 ** 2):.2f} MB"
+    else:
+        return f"{size_in_bytes / 1024:.2f} KB"
 
 def get_local_ip():
     """Extracts internal operational LAN network interface IP identification string."""
@@ -233,44 +232,43 @@ def upload_file():
     """Saves file packages and displays processing versus wire transmission metrics."""
     if 'files' not in request.files:
         return 'No files uploaded', 400
-    
-    # Extract the client timing injection from the multi-part data packet
+
     client_timestamp = request.form.get('client_launch_timestamp')
     server_receive_time = time.time()
-    
+
     files = request.files.getlist('files')
-    
+
     for file in files:
         if file.filename:
             disk_start = time.time()
             target_dir = route_file(file.filename)
             os.makedirs(target_dir, exist_ok=True)
-            
+
             filepath = os.path.join(target_dir, file.filename)
             file.save(filepath)
             disk_end = time.time()
-            
+
             file_size = os.path.getsize(filepath)
             disk_duration = round((disk_end - disk_start) * 1000)
-            
-            # Compute total actual over-the-air network transmission transit time
+
             if client_timestamp:
                 total_network_duration = round((server_receive_time - (float(client_timestamp) / 1000.0)) * 1000)
-                if total_network_duration < 0: total_network_duration = 0
+                if total_network_duration < 0:
+                    total_network_duration = 0
                 network_display = f"{total_network_duration} ms"
             else:
                 network_display = "Unable to compute (Incompatible client header)"
 
-            print(f"\n✅ SUCCESS: {file.filename}")
-            print(f"   📂 Path: {filepath}")
-            print(f"   📦 Size: {format_size(file_size)}")
-            print(f"   📡 Actual Network Transit Time: {network_display}")
-            print(f"   💾 System Drive Write Duration: {disk_duration} ms")
+            print(f"\n  SUCCESS: {file.filename}")
+            print(f"   Path: {filepath}")
+            print(f"   Size: {format_size(file_size)}")
+            print(f"   Network Transit Time: {network_display}")
+            print(f"   Drive Write Duration: {disk_duration} ms")
             print("-" * 55)
-            
+
     if request.headers.get('X-Requested-With') != 'XMLHttpRequest':
         return redirect('/')
-        
+
     return 'Success', 200
 
 @app.route('/download/<filename>')
@@ -285,16 +283,19 @@ if __name__ == '__main__':
     ip_addr = get_local_ip()
     port_num = 5001
     hosting_url = f"http://{ip_addr}:{port_num}"
-    
-    print("\n" + "="*55)
-    print("      🚀 LOCAL DROP SHARE SERVER ACTIVE")
-    print("="*55)
-    print(f"\nUrl link route: {hosting_url}")
-    print("If you toggle routing band connections, do not close this console.")
-    
-        qr = qrcode.QRCode(version=1, box_size=1, border=2)
+
+    print("\n" + "=" * 55)
+    print("      LOCAL DROP SHARE SERVER ACTIVE")
+    print("=" * 55)
+    print(f"\n  URL: {hosting_url}")
+    print("  Keep this console open while transferring files.")
+    print("  Press Ctrl+C to stop the server.\n")
+
+    qr = qrcode.QRCode(version=1, box_size=1, border=2)
     qr.add_data(hosting_url)
     qr.make(fit=True)
     qr.print_ascii(invert=True)
-    
+
+    print(f"\n  Scan the QR code above or open: {hosting_url}\n")
+
     app.run(host='0.0.0.0', port=port_num, debug=False, threaded=True)
