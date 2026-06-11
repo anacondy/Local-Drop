@@ -76,7 +76,6 @@ def route_file(filename):
     return dirs['Other']
 
 def get_unique_filename(directory, filename):
-    """Prevents file overwrites by appending (1), (2), etc., if name exists."""
     filepath = os.path.join(directory, filename)
     if not os.path.exists(filepath):
         return filepath
@@ -102,6 +101,30 @@ def get_local_ip():
     finally:
         s.close()
 
+# FIX 1: Robust file scanning and exact-time sorting
+def get_all_network_files():
+    files_data = []
+    search_paths = list(get_target_directories().values()) + [get_inbox_directory()]
+    seen = set()
+    
+    for d in search_paths:
+        if not os.path.exists(d):
+            continue
+        for f in os.listdir(d):
+            if f in seen:
+                continue
+            filepath = os.path.join(d, f)
+            if os.path.isfile(filepath):
+                files_data.append({
+                    'name': f,
+                    'mtime': os.path.getmtime(filepath)
+                })
+                seen.add(f)
+                
+    # Sort by exact modification time, newest strictly on top
+    files_data.sort(key=lambda x: x['mtime'], reverse=True)
+    return [f['name'] for f in files_data]
+
 # ── Device tracking ───────────────────────────────────────────────────────────
 def detect_device(ua: str) -> str:
     ua = ua.lower()
@@ -125,7 +148,8 @@ def register_client(ip: str, ua: str, role: str = 'viewer'):
             connected_clients[ip]['last_seen'] = time.time()
             connected_clients[ip]['role']      = role
 
-def prune_stale(timeout: int = 60):
+# FIX 2: Faster pruning (12 seconds)
+def prune_stale(timeout: int = 12):
     now = time.time()
     with connected_lock:
         stale = [ip for ip, c in connected_clients.items() if now - c['last_seen'] > timeout]
@@ -158,14 +182,26 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       --cyber-red: #ff003c;
       --glass-bg: rgba(15, 15, 18, 0.5);
       --glass-border: rgba(255, 255, 255, 0.08);
+      color-scheme: dark; /* Force dark scrollbars and elements globally */
     }
+    
     *{box-sizing:border-box}
-    body {
+    
+    /* FIX: Solid deep background across the entire html canvas to kill white edges */
+    html, body {
+      background-color: #020202; 
+      color: #e2e8f0;
       font-family: system-ui, -apple-system, sans-serif;
       -webkit-tap-highlight-color: transparent;
-      background: radial-gradient(circle at 50% 0%, #111115 0%, #020202 100%);
-      color: #e2e8f0;
+      margin: 0;
+      padding: 0;
       min-height: 100vh;
+      width: 100%;
+    }
+    
+    body {
+      background: radial-gradient(circle at 50% 0%, #111115 0%, #020202 100%);
+      background-attachment: fixed; /* Kills white screen on over-scroll */
     }
     
     .glass-panel {
@@ -188,6 +224,7 @@ HTML_TEMPLATE = """<!DOCTYPE html>
     
     ::-webkit-scrollbar { width: 4px; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 9px; }
+    ::-webkit-scrollbar-track { background: transparent; }
     
     .zone-idle { border-color: rgba(255,255,255,0.15); }
     .zone-sending { border-color: var(--cyber-cyan); box-shadow: 0 0 0 4px rgba(0,240,255,0.1); }
@@ -199,106 +236,113 @@ HTML_TEMPLATE = """<!DOCTYPE html>
 
 <div class="fixed top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-64 bg-cyan-900/10 blur-[100px] pointer-events-none"></div>
 
-<div class="w-full max-w-md space-y-5 relative z-10">
+<div class="w-full max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-6 relative z-10">
 
-  <div class="glass-panel p-5">
-    <div class="flex items-center justify-between">
-      <div>
-        <h1 class="text-xl font-bold tracking-tight text-white drop-shadow-md">The Vault</h1>
-        <p class="text-xs text-neutral-400 mt-0.5 uppercase tracking-wider">Cross-Platform Sync</p>
-      </div>
-      <div class="flex items-center gap-2 bg-black/40 border border-white/10 rounded-full px-3 py-1.5 shadow-inner">
-        <span id="dot" class="w-2.5 h-2.5 rounded-full bg-neutral-600"></span>
-        <span id="device-count" class="text-xs font-semibold text-neutral-300">— nodes</span>
-      </div>
-    </div>
-    
-    <div id="device-list" class="hidden mt-4 space-y-1">
-      <div id="device-items" class="space-y-1.5"></div>
-    </div>
-  </div>
-
-  <div class="glass-panel p-5">
-    <p class="text-[10px] font-bold uppercase tracking-widest text-cyan-400 mb-3 flex items-center gap-2">
-      <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-      Broadcast to Network
-    </p>
-
-    <div id="drop-zone"
-         class="border-2 border-dashed zone-idle rounded-xl p-8 text-center cursor-pointer bg-black/20
-                transition-all duration-300 hover:border-cyan-500/50 hover:bg-cyan-900/10 select-none">
-      <input type="file" id="file-input" class="hidden" multiple>
-
-      <div id="state-idle" class="space-y-3">
-        <svg style="width:40px;height:40px;margin:0 auto;display:block;opacity:0.6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-        </svg>
+  <div class="md:col-span-5 space-y-6">
+  
+    <div class="glass-panel p-5">
+      <div class="flex items-center justify-between">
         <div>
-          <p class="text-sm font-semibold text-neutral-200">Tap to Select Files</p>
-          <p class="text-[11px] text-neutral-500 mt-1">Available instantly on all devices</p>
+          <h1 class="text-xl font-bold tracking-tight text-white drop-shadow-md">The Vault</h1>
+          <p class="text-xs text-neutral-400 mt-0.5 uppercase tracking-wider">Cross-Platform Sync</p>
+        </div>
+        <div class="flex items-center gap-2 bg-black/40 border border-white/10 rounded-full px-3 py-1.5 shadow-inner">
+          <span id="dot" class="w-2.5 h-2.5 rounded-full bg-neutral-600"></span>
+          <span id="device-count" class="text-xs font-semibold text-neutral-300">— nodes</span>
         </div>
       </div>
+      
+      <div id="device-list" class="hidden mt-4 space-y-1">
+        <div id="device-items" class="space-y-1.5"></div>
+      </div>
+    </div>
 
-      <div id="state-uploading" class="hidden space-y-4">
-        <svg class="spin" style="width:28px;height:28px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#00f0ff" stroke-width="2">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
-        </svg>
-        <p id="prog-filename" class="text-xs text-neutral-400 truncate px-4 font-mono"></p>
-        <div class="w-full bg-black/60 border border-white/10 rounded-full h-2 overflow-hidden shadow-inner">
-          <div id="prog-bar" class="h-full rounded-full transition-all duration-100 bg-[#00f0ff] shadow-[0_0_12px_#00f0ff]" style="width:0%"></div>
+    <div class="glass-panel p-5">
+      <p class="text-[10px] font-bold uppercase tracking-widest text-cyan-400 mb-3 flex items-center gap-2">
+        <svg class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+        Broadcast to Network
+      </p>
+
+      <div id="drop-zone"
+           class="border-2 border-dashed zone-idle rounded-xl p-8 text-center cursor-pointer bg-black/20
+                  transition-all duration-300 hover:border-cyan-500/50 hover:bg-cyan-900/10 select-none">
+        <input type="file" id="file-input" class="hidden" multiple>
+
+        <div id="state-idle" class="space-y-3">
+          <svg style="width:40px;height:40px;margin:0 auto;display:block;opacity:0.6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <div>
+            <p class="text-sm font-semibold text-neutral-200">Tap to Select Files</p>
+            <p class="text-[11px] text-neutral-500 mt-1">Available instantly on all devices</p>
+          </div>
         </div>
-        <p class="text-xs text-cyan-400 font-mono tracking-widest"><span id="prog-pct">0</span>%</p>
-      </div>
 
-      <div id="state-done" class="hidden space-y-2">
-        <svg style="width:36px;height:36px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#22c55e" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-        </svg>
-        <p class="text-sm font-semibold text-green-400">Transmitted</p>
-      </div>
+        <div id="state-uploading" class="hidden space-y-4">
+          <svg class="spin" style="width:28px;height:28px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#00f0ff" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          <p id="prog-filename" class="text-xs text-neutral-400 truncate px-4 font-mono"></p>
+          <div class="w-full bg-black/60 border border-white/10 rounded-full h-2 overflow-hidden shadow-inner">
+            <div id="prog-bar" class="h-full rounded-full transition-all duration-100 bg-[#00f0ff] shadow-[0_0_12px_#00f0ff]" style="width:0%"></div>
+          </div>
+          <p class="text-xs text-cyan-400 font-mono tracking-widest"><span id="prog-pct">0</span>%</p>
+        </div>
 
-      <div id="state-error" class="hidden space-y-2">
-        <svg style="width:36px;height:36px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#ff003c" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
-        </svg>
-        <p id="err-msg" class="text-sm font-semibold text-red-400">Connection Failed</p>
+        <div id="state-done" class="hidden space-y-2">
+          <svg style="width:36px;height:36px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#22c55e" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p class="text-sm font-semibold text-green-400">Transmitted</p>
+        </div>
+
+        <div id="state-error" class="hidden space-y-2">
+          <svg style="width:36px;height:36px;margin:0 auto;display:block" fill="none" viewBox="0 0 24 24" stroke="#ff003c" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
+          </svg>
+          <p id="err-msg" class="text-sm font-semibold text-red-400">Connection Failed</p>
+        </div>
       </div>
     </div>
   </div>
 
-  <div class="glass-panel p-5">
-    <div class="flex items-center justify-between mb-4 border-b border-white/5 pb-3">
-      <p class="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Network Inbox</p>
-      <div class="flex items-center gap-1.5 text-[10px] text-cyan-500 font-mono tracking-widest uppercase">
-        <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping"></span>
-        Live Sync
+  <div class="md:col-span-7">
+    <div class="glass-panel p-5 flex flex-col h-[500px] md:h-[calc(100vh-4rem)] max-h-[800px]">
+      <div class="flex items-center justify-between mb-4 border-b border-white/5 pb-3">
+        <p class="text-[10px] font-bold uppercase tracking-widest text-neutral-400">Network Inbox</p>
+        <div class="flex items-center gap-1.5 text-[10px] text-cyan-500 font-mono tracking-widest uppercase">
+          <span class="w-1.5 h-1.5 rounded-full bg-cyan-500 animate-ping"></span>
+          Live Sync
+        </div>
+      </div>
+
+      <div id="file-list-container" class="space-y-2 flex-1 overflow-y-auto pr-2 pb-4">
+        {% if files %}
+          {% for file in files %}
+          <div class="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
+            <span class="shrink-0 drop-shadow-md">{{ file_icon(file) | safe }}</span>
+            <span class="flex-1 text-sm text-neutral-300 truncate" title="{{ file }}">{{ file }}</span>
+            <a href="/download/{{ file }}" download target="_blank"
+               class="shrink-0 flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase
+                      bg-black/40 hover:bg-cyan-900/40 text-cyan-400 border border-cyan-500/30
+                      px-3 py-2 rounded-lg transition-all shadow-[0_0_10px_rgba(0,240,255,0.05)] hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]">
+              Download
+            </a>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="py-8 text-center">
+            <p class="text-sm text-neutral-600 font-mono">Vault is empty.</p>
+          </div>
+        {% endif %}
       </div>
     </div>
-
-    <div id="file-list-container" class="space-y-2 max-h-72 overflow-y-auto pr-1">
-      {% if files %}
-        {% for file in files %}
-        <div class="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
-          <span class="shrink-0 drop-shadow-md">{{ file_icon(file) | safe }}</span>
-          <span class="flex-1 text-sm text-neutral-300 truncate" title="{{ file }}">{{ file }}</span>
-          <a href="/download/{{ file }}" download
-             class="shrink-0 flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase
-                    bg-black/40 hover:bg-cyan-900/40 text-cyan-400 border border-cyan-500/30
-                    px-3 py-2 rounded-lg transition-all shadow-[0_0_10px_rgba(0,240,255,0.05)] hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]">
-            Download
-          </a>
-        </div>
-        {% endfor %}
-      {% else %}
-        <div class="py-8 text-center">
-          <p class="text-sm text-neutral-600 font-mono">Vault is empty.</p>
-        </div>
-      {% endif %}
-    </div>
   </div>
+
 </div>
 
 <script>
+// UI State Handlers
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const progBar = document.getElementById('prog-bar');
@@ -377,7 +421,7 @@ async function pollNetworkFiles() {
       <div class="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
         <span class="shrink-0 drop-shadow-md">${f.icon}</span>
         <span class="flex-1 text-sm text-neutral-300 truncate" title="${f.name}">${f.name}</span>
-        <a href="/download/${encodeURIComponent(f.name)}" download
+        <a href="/download/${encodeURIComponent(f.name)}" download target="_blank"
            class="shrink-0 flex items-center gap-1.5 text-[11px] font-bold tracking-wider uppercase
                   bg-black/40 hover:bg-cyan-900/40 text-cyan-400 border border-cyan-500/30
                   px-3 py-2 rounded-lg transition-all shadow-[0_0_10px_rgba(0,240,255,0.05)] hover:shadow-[0_0_15px_rgba(0,240,255,0.2)]">
@@ -426,9 +470,14 @@ async function pollDevices() {
   } catch(_) {}
 }
 
+// FIX 4: Faster polling and explicit unload signal kills ghost nodes
 setInterval(pollDevices, 3000);
 pollDevices();
-setInterval(() => fetch('/api/ping', {method:'POST'}), 20000);
+setInterval(() => fetch('/api/ping', {method:'POST'}), 5000); // Ping every 5s instead of 20s
+
+window.addEventListener('beforeunload', () => {
+  navigator.sendBeacon('/api/disconnect');
+});
 </script>
 </body>
 </html>"""
@@ -459,24 +508,26 @@ def index():
     ua = request.headers.get('User-Agent', '')
     register_client(ip, ua, 'viewer')
     prune_stale()
-    all_files = []
     
-    for d in get_target_directories().values():
-        if os.path.exists(d):
-            all_files.extend(os.listdir(d))
-            
-    inbox_dir = get_inbox_directory()
-    if os.path.exists(inbox_dir):
-        all_files.extend(os.listdir(inbox_dir))
+    sorted_files = get_all_network_files()
         
-    return render_template_string(HTML_TEMPLATE, files=sorted(set(all_files), key=lambda x: os.path.getmtime(os.path.join(inbox_dir, x)) if os.path.exists(os.path.join(inbox_dir, x)) else 0, reverse=True),
-                                  session_token=SESSION_TOKEN)
+    return render_template_string(HTML_TEMPLATE, files=sorted_files, session_token=SESSION_TOKEN)
 
 @app.route('/api/ping', methods=['POST'])
 def api_ping():
     register_client(request.remote_addr, request.headers.get('User-Agent',''), 'viewer')
     prune_stale()
     return 'ok', 200
+
+# NEW: Explicit disconnect endpoint triggered when a browser tab closes
+@app.route('/api/disconnect', methods=['POST'])
+def api_disconnect():
+    ip = request.remote_addr
+    with connected_lock:
+        if ip in connected_clients:
+            del connected_clients[ip]
+            P(f"\n  {DIM}- Disconnected  {ip} (Tab closed){RESET}")
+    return '', 204
 
 @app.route('/api/devices')
 def api_devices():
@@ -488,17 +539,8 @@ def api_devices():
 
 @app.route('/api/files')
 def api_files():
-    all_files = []
-    for d in get_target_directories().values():
-        if os.path.exists(d):
-            all_files.extend(os.listdir(d))
-            
-    inbox_dir = get_inbox_directory()
-    if os.path.exists(inbox_dir):
-        all_files.extend(os.listdir(inbox_dir))
-        
-    unique_files = sorted(set(all_files), key=lambda x: os.path.getmtime(os.path.join(inbox_dir, x)) if os.path.exists(os.path.join(inbox_dir, x)) else 0, reverse=True)
-    file_data = [{'name': f, 'icon': file_icon(f)} for f in unique_files]
+    sorted_files = get_all_network_files()
+    file_data = [{'name': f, 'icon': file_icon(f)} for f in sorted_files]
     return jsonify({'files': file_data})
 
 @app.route('/upload', methods=['POST'])
@@ -524,7 +566,6 @@ def upload_file():
 
         disk_start = time.time()
         
-        # Save exact 1 copy to the designated category folder
         target_dir = route_file(file.filename)
         os.makedirs(target_dir, exist_ok=True)
         filepath = get_unique_filename(target_dir, file.filename)
@@ -534,7 +575,6 @@ def upload_file():
         file_size = os.path.getsize(filepath)
         net_display = f"{max(0, round((server_receive_time - float(client_timestamp) / 1000.0) * 1000))} ms" if client_timestamp else "n/a"
 
-        # Terminal feedback
         ts = datetime.now().strftime('%H:%M:%S')
         final_name = os.path.basename(filepath)
         P(f"\n  {GREEN}[{ts}] RECEIVED{RESET}  {color_filename(final_name)}")
@@ -554,7 +594,6 @@ def download_file(filename):
     ua        = request.headers.get('User-Agent', '')
     register_client(client_ip, ua, 'receiving')
 
-    # Find the single copy in the sorted folders or old inbox
     search_paths = list(get_target_directories().values()) + [get_inbox_directory()]
     for d in search_paths:
         target = os.path.join(d, filename)
