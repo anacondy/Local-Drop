@@ -1,6 +1,5 @@
 import os
 import sys
-import shutil
 import socket
 import qrcode
 import time
@@ -43,7 +42,7 @@ def color_filename(filename):
         return f"{PURPLE}{name}{RESET}.{OCEAN}{ext}{RESET}"
     return f"{PURPLE}{filename}{RESET}"
 
-# ── Paths ─────────────────────────────────────────────────────────────────────
+# ── Paths & File Handling ─────────────────────────────────────────────────────
 def get_inbox_directory():
     home = str(Path.home())
     if platform.system() == 'Windows':
@@ -75,6 +74,18 @@ def route_file(filename):
     if ext in ['mp3','wav','aac','flac','m4a','ogg','wma','alac','opus']:                     return dirs['Music']
     if ext in ['pdf','doc','docx','txt','xls','xlsx','ppt','pptx','csv','json','xml','md']:   return dirs['Docs']
     return dirs['Other']
+
+def get_unique_filename(directory, filename):
+    """Prevents file overwrites by appending (1), (2), etc., if name exists."""
+    filepath = os.path.join(directory, filename)
+    if not os.path.exists(filepath):
+        return filepath
+    
+    base, ext = os.path.splitext(filename)
+    counter = 1
+    while os.path.exists(os.path.join(directory, f"{base} ({counter}){ext}")):
+        counter += 1
+    return os.path.join(directory, f"{base} ({counter}){ext}")
 
 def format_size(n):
     if n >= 1024**3: return f"{n/1024**3:.2f} GB"
@@ -157,7 +168,6 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       min-height: 100vh;
     }
     
-    /* Cinematic Frosted Glass */
     .glass-panel {
       background: var(--glass-bg);
       backdrop-filter: blur(20px);
@@ -286,11 +296,9 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       {% endif %}
     </div>
   </div>
-
 </div>
 
 <script>
-// UI State Handlers
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const progBar = document.getElementById('prog-bar');
@@ -310,7 +318,6 @@ fileInput.addEventListener('change', () => handleFiles(fileInput.files));
 ['dragenter','dragover','dragleave','drop'].forEach(ev => dropZone.addEventListener(ev, e => e.preventDefault()));
 dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
 
-// Upload Logic
 function handleFiles(files) {
   if (!files.length) return;
   const fd = new FormData();
@@ -339,7 +346,7 @@ function handleFiles(files) {
   xhr.onload = () => {
     if (xhr.status === 200) {
       showState('done');
-      pollNetworkFiles(); // Immediately pull new files down to the list
+      pollNetworkFiles(); 
       setTimeout(() => { showState('idle'); }, 1500);
     } else {
       errMsg.textContent = xhr.status === 403 ? 'Session Terminated' : 'Upload Failed';
@@ -356,7 +363,6 @@ function handleFiles(files) {
   xhr.send(fd);
 }
 
-// ── Live File Polling Engine (This powers the Cross-Platform Magic) ──
 const fileListContainer = document.getElementById('file-list-container');
 async function pollNetworkFiles() {
   try {
@@ -367,7 +373,6 @@ async function pollNetworkFiles() {
       return;
     }
     
-    // Renders the list dynamically with innerHTML so SVGs display properly
     fileListContainer.innerHTML = data.files.map(f => `
       <div class="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
         <span class="shrink-0 drop-shadow-md">${f.icon}</span>
@@ -382,10 +387,8 @@ async function pollNetworkFiles() {
     `).join('');
   } catch(e) {}
 }
-// Automatically ping the server for new files every 2 seconds
 setInterval(pollNetworkFiles, 2000);
 
-// ── Device Tracking Engine ──
 const deviceCount = document.getElementById('device-count');
 const deviceList  = document.getElementById('device-list');
 const deviceItems = document.getElementById('device-items');
@@ -403,16 +406,19 @@ async function pollDevices() {
     const res  = await fetch('/api/devices');
     const data = await res.json();
     const list = data.devices || [];
+    const myId = data.my_id;
 
     deviceCount.textContent = list.length + (list.length === 1 ? ' node' : ' nodes');
     dot.className = 'w-2.5 h-2.5 rounded-full ' + (list.length > 1 ? 'dot-active' : 'bg-neutral-600');
 
-    if (list.length > 1) {
+    if (list.length > 0) {
       deviceList.classList.remove('hidden');
       deviceItems.innerHTML = list.map(d => `
         <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-black/20 border border-white/5">
           <span class="text-neutral-500">${deviceIcon(d.device)}</span>
-          <span class="font-mono text-[10px] text-neutral-400 flex-1 truncate">${d.id}</span>
+          <span class="font-mono text-[10px] text-neutral-400 flex-1 truncate">
+            ${d.id} ${d.id === myId ? '<span class="text-cyan-500 ml-1 font-bold">(You)</span>' : ''}
+          </span>
         </div>`).join('');
     } else {
       deviceList.classList.add('hidden');
@@ -478,8 +484,7 @@ def api_devices():
     my_ip = request.remote_addr
     with connected_lock:
         devices  = [{'id': c['id'], 'device': c['device'], 'role': c['role']} for c in connected_clients.values()]
-        my_role  = connected_clients.get(my_ip, {}).get('role', 'viewer')
-    return jsonify({'devices': devices, 'my_role': my_role})
+    return jsonify({'devices': devices, 'my_id': my_ip})
 
 @app.route('/api/files')
 def api_files():
@@ -518,25 +523,23 @@ def upload_file():
         if not file.filename: continue
 
         disk_start = time.time()
+        
+        # Save exact 1 copy to the designated category folder
         target_dir = route_file(file.filename)
         os.makedirs(target_dir, exist_ok=True)
-        filepath = os.path.join(target_dir, file.filename)
+        filepath = get_unique_filename(target_dir, file.filename)
         file.save(filepath)
-
-        inbox_dir  = get_inbox_directory()
-        os.makedirs(inbox_dir, exist_ok=True)
-        inbox_path = os.path.join(inbox_dir, file.filename)
-        shutil.copy2(filepath, inbox_path)
 
         disk_ms   = round((time.time() - disk_start) * 1000)
         file_size = os.path.getsize(filepath)
         net_display = f"{max(0, round((server_receive_time - float(client_timestamp) / 1000.0) * 1000))} ms" if client_timestamp else "n/a"
 
+        # Terminal feedback
         ts = datetime.now().strftime('%H:%M:%S')
-        P(f"\n  {GREEN}[{ts}] RECEIVED{RESET}  {color_filename(file.filename)}")
+        final_name = os.path.basename(filepath)
+        P(f"\n  {GREEN}[{ts}] RECEIVED{RESET}  {color_filename(final_name)}")
         P(f"   From    : {client_ip}  ({detect_device(ua)})")
-        P(f"   Sorted  : {filepath}")
-        P(f"   Inbox   : {inbox_path}")
+        P(f"   Saved to: {filepath}")
         P(f"   Size    : {format_size(file_size)}")
         P(f"   Network : {net_display}   Write: {disk_ms} ms")
         P("   " + "-" * 52)
@@ -551,6 +554,7 @@ def download_file(filename):
     ua        = request.headers.get('User-Agent', '')
     register_client(client_ip, ua, 'receiving')
 
+    # Find the single copy in the sorted folders or old inbox
     search_paths = list(get_target_directories().values()) + [get_inbox_directory()]
     for d in search_paths:
         target = os.path.join(d, filename)
