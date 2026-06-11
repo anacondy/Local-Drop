@@ -1,50 +1,53 @@
 @echo off
-title Local Drop Launcher
-cls
+chcp 65001 >nul
+title Local Drop
 
-:: Force terminal into the script's directory
-cd /d "%~dp0"
+echo.
+echo  =====================================================
+echo        LOCAL DROP - STARTING UP
+echo  =====================================================
+echo.
 
-echo =======================================================
-echo    Initializing Local Drop Environment...
-echo =======================================================
-
-:: 1. Smart Python Targeter (Prefers 'py -3', falls back to 'python')
-set PYTHON_CMD=python
-py -3 --version >NUL 2>NUL
-if %errorlevel% equ 0 set PYTHON_CMD=py -3
-
-%PYTHON_CMD% --version >NUL 2>NUL
-if %errorlevel% neq 0 (
-    echo [Error] Python 3 is not installed or not in PATH.
+:: Check Python is installed
+python --version >nul 2>&1
+if errorlevel 1 (
+    echo  [ERROR] Python not found.
+    echo  Please install Python 3.8+ from https://python.org
+    echo  Make sure to check "Add Python to PATH" during install.
     pause
-    exit /b
+    exit /b 1
 )
 
-:: 2. Virtual Environment Generator
-if not exist "venv\Scripts\activate.bat" (
-    echo [Setup] Creating isolated Virtual Environment...
-    %PYTHON_CMD% -m venv venv
+:: Create virtual environment if it doesn't exist
+if not exist "venv" (
+    echo  [SETUP] Creating virtual environment...
+    python -m venv venv
+    if errorlevel 1 (
+        echo  [ERROR] Failed to create virtual environment.
+        pause
+        exit /b 1
+    )
+    echo  [SETUP] Virtual environment created.
 )
 
-:: 3. Activate the Virtual Environment
+:: Activate virtual environment
 call venv\Scripts\activate.bat
 
-:: 4. Silent Dependency Check (Inside venv)
-python -c "import flask, qrcode" 2>NUL
-if %errorlevel% neq 0 (
-    echo [Setup] Installing required packages securely...
-    pip install -r requirements.txt
-) else (
-    echo [System] Dependencies verified.
+:: Install / upgrade dependencies silently
+echo  [SETUP] Checking dependencies...
+pip install -r requirements.txt -q --disable-pip-version-check
+if errorlevel 1 (
+    echo  [ERROR] Failed to install dependencies.
+    pause
+    exit /b 1
 )
-
-:: 5. Launch Application
-echo [System] Launching Server...
-:LOOP
-python local_drop.py
+echo  [SETUP] Dependencies OK.
 echo.
-echo [Warning] Connection dropped or network band shifted. 
-echo Re-initializing in 3 seconds to resume sharing... (Press Ctrl+C to quit)
-timeout /t 3 >nul
-goto LOOP
+
+:: Run the server
+python local_drop.py
+
+:: If server exits, pause so user can read any error
+echo.
+echo  Server stopped. Press any key to close.
+pause >nul

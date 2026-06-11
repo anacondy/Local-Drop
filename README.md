@@ -1,54 +1,116 @@
 # Local Drop 🚀
 
-A high-performance, lightweight, open-source Progressive Web App (PWA) designed to transfer files directly across local networks (LAN) at maximum hardware speeds without using cell data or internet bandwidth.
-
-### 🚀 Quick Start
-If you have Git and Python installed, simply run this command in your terminal:
-
-**Windows (PowerShell):**
-```powershell
-git clone https://github.com/anacondy/Local-Drop.git && cd Local-Drop && .\run.bat
-```
-
-**macOS / Linux:**
-```bash
-git clone https://github.com/anacondy/Local-Drop.git && cd Local-Drop && chmod +x run.sh && ./run.sh
-```
+A high-performance, lightweight, open-source Progressive Web App (PWA) designed to transfer files directly across local networks (LAN) at maximum hardware speeds — no internet, no cloud, no accounts.
 
 ---
 
+## ⚡ Quick Start
+
+These commands are designed to be run from anywhere. They will automatically download the app, or if you already have it, update it to the latest version and launch it!
+
+### Windows (Command Prompt / CMD)
+
+```cmd
+if exist Local-Drop (cd Local-Drop && git pull && .\run.bat) else (git clone [https://github.com/anacondy/Local-Drop.git](https://github.com/anacondy/Local-Drop.git) && cd Local-Drop && .\run.bat)
+
+```
+
+### Windows (PowerShell)
+
+```powershell
+if (Test-Path Local-Drop) { cd Local-Drop; git pull; .\run.bat } else { git clone [https://github.com/anacondy/Local-Drop.git](https://github.com/anacondy/Local-Drop.git); cd Local-Drop; .\run.bat }
+
+```
+
+### macOS / Linux
+
+```bash
+[ -d "Local-Drop" ] && (cd Local-Drop && git pull && ./run.sh) || (git clone [https://github.com/anacondy/Local-Drop.git](https://github.com/anacondy/Local-Drop.git) && cd Local-Drop && chmod +x run.sh && ./run.sh)
+
+```
+
+---
 
 ## 💻 System & Device Compatibility
 
-Local Drop is engineered to be fully cross-platform. Below are the precise environmental requirements for deployment:
+### Host Machine (The Server — runs the Python server)
 
-### Host Machine (The Server PC)
-* **Windows:** Windows 10 or Windows 11 (Supports both standard directories and active OneDrive-redirected folders).
-* **macOS:** macOS 11 (Big Sur) or newer (Automatically routes video assets to native Apple `Movies` directory).
-* **Linux:** Any modern distribution (Ubuntu, Debian, Fedora, Arch) running Python 3.x.
+| OS | Support |
+| --- | --- |
+| Windows 10 / 11 | Full support. Detects OneDrive and routes files there automatically. |
+| macOS 11+ | Full support. Uses native `Movies` folder for video. |
+| Linux (Ubuntu, Arch, Fedora…) | Full support. |
 
-### Client Devices (The Senders/Receivers)
-* **Android:** Works on any modern Android device via Google Chrome (Supports full PWA standalone app installation directly to the home screen).
-* **iOS / iPadOS:** Works via Safari browser (Supports "Add to Home Screen" framework layout).
+### Client Devices (Connect via browser — send or receive files)
+
+| Device | How |
+| --- | --- |
+| Android | Chrome browser. Can install as PWA from the address bar. |
+| iPhone / iPad | Safari browser. Use "Add to Home Screen" for PWA install. |
+| Any PC on same WiFi | Open the URL or scan the QR code in the terminal. |
+
+> Multiple devices can connect at the same time. The UI shows a live count and each device's current role (sending ↑ / receiving ↓ / viewing).
 
 ---
 
-## 🛠️ Prerequisites & Installation
+## 🗂️ Where Files Go
 
-Before launching the utility, ensure your host computer has **Python 3.8 or higher** installed and added to your system's environment variables (PATH).
+Every received file is saved in **two places**:
 
-### Project Directory Structure
-Ensure your local project folder is organized exactly like this:
-```text
-LocalDrop/
-├── .gitignore           # Keeps your repo clean
-├── local_drop.py        # The master Flask & PWA backend
-├── requirements.txt     # List of dependencies
-├── run.bat              # Universal Windows launcher
-└── run.sh               # Universal macOS/Linux launcher
+1. **Sorted by type** into the appropriate folder:
+* Images → `Pictures/LocalDrop/`
+* Videos → `Videos/LocalDrop/`
+* Music → `Music/LocalDrop/`
+* Documents → `Documents/LocalDrop/`
+* Other → `Downloads/LocalDrop/`
 
-### 🛡️ Isolated Execution Environment
-To prevent system conflicts and adhere to modern PEP 668 standards (especially on Linux), the automated launch scripts will seamlessly generate a localized Python Virtual Environment (`venv`). 
-* No `sudo` permissions required.
-* No global system packages are touched.
-* Simply delete the `LocalDrop` folder to completely uninstall; nothing is left behind on your OS.
+
+2. **Flat inbox** for quick access → `OneDrive/LocalDrop-Inbox/` (Windows) or `~/LocalDrop-Inbox/`
+
+The inbox folder is created automatically when the server starts.
+
+---
+
+## 🛠️ Prerequisites
+
+* **Python 3.8 or higher** — must be in your system PATH
+* **Git** — to clone the repo
+
+### Project Structure
+
+```
+Local-Drop/
+├── local_drop.py    # Flask server + PWA frontend
+├── requirements.txt # Dependencies (flask, qrcode)
+├── run.bat          # Windows launcher (auto-installs deps)
+└── run.sh           # macOS/Linux launcher
+
+```
+
+---
+
+## 🛡️ Security Notes
+
+* **Session token**: Each server start generates a unique token. Old browser tabs from a previous session cannot upload files after the server is restarted — they get a "Session closed" error and must refresh.
+* **Shutdown locks uploads**: Pressing `Ctrl+C` stops the server and immediately rejects any further upload attempts from any device.
+* **LAN only**: The server binds to your local IP. It is not accessible from the internet.
+
+---
+
+## 🚀 How It Works
+
+1. Run `.\run.bat` (Windows) or `./run.sh` (Mac/Linux)
+2. A QR code appears in the terminal
+3. Scan it with any device on the same WiFi
+4. **Send to PC**: tap the upload zone → select files → they go to your PC instantly
+5. **Get from PC**: files you place in the `LocalDrop` sorted folders appear in the "Get from PC" list on any connected device
+
+---
+
+## 🔄 Uninstall
+
+Delete the `Local-Drop` folder. The only other things created are the `LocalDrop` subfolders inside your Pictures/Videos/etc. and the `LocalDrop-Inbox` folder — delete those too if you want a clean uninstall. Nothing else is touched on your system.
+
+```
+
+```
