@@ -545,7 +545,6 @@ def api_files():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    global server_alive
     if not server_alive: return 'Session closed', 403
 
     token = request.form.get('session_token', '')
@@ -564,11 +563,17 @@ def upload_file():
     for file in files:
         if not file.filename: continue
 
+        # SECURITY: neutralize path traversal in the uploaded filename
+        # (e.g. "../../evil.txt" -> "evil.txt") so files can't escape the target dir
+        safe_name = file.filename.replace('\\', '/').split('/')[-1]
+        if not safe_name or safe_name in ('.', '..'):
+            continue
+
         disk_start = time.time()
-        
-        target_dir = route_file(file.filename)
+
+        target_dir = route_file(safe_name)
         os.makedirs(target_dir, exist_ok=True)
-        filepath = get_unique_filename(target_dir, file.filename)
+        filepath = get_unique_filename(target_dir, safe_name)
         file.save(filepath)
 
         disk_ms   = round((time.time() - disk_start) * 1000)
@@ -596,8 +601,15 @@ def download_file(filename):
 
     search_paths = list(get_target_directories().values()) + [get_inbox_directory()]
     for d in search_paths:
-        target = os.path.join(d, filename)
-        if os.path.exists(target):
+        base   = os.path.realpath(d)
+        target = os.path.realpath(os.path.join(d, filename))
+        # SECURITY: reject any path that escapes the allowed base directory
+        # (prevents ../../etc/passwd style traversal from reading host files)
+        try:
+            inside = os.path.commonpath([base, target]) == base
+        except ValueError:
+            inside = False  # mixed drives / unprefixed paths
+        if inside and os.path.isfile(target):
             ts = datetime.now().strftime('%H:%M:%S')
             P(f"\n  {YELLOW}[{ts}] SENT{RESET}  {color_filename(filename)}  -> {client_ip}  ({detect_device(ua)})")
             P("   " + "-" * 52)
